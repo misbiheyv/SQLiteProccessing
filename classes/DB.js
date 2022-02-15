@@ -1,18 +1,26 @@
-import sqlt3 from "sqlite3";
-import fs from "fs";
-
-const sqlite = sqlt3.verbose();
+import { query } from "express";
+import sqlite3 from "sqlite3";
+const sqlite = sqlite3.verbose();
 let db;
 
-class DB{
+class DB {
+    
+    static init(dbName, tableName) {
+        // if (dbName !== 'string' || tableName !== 'string' || dbName.length < 1 || tableName < 1) 
+        //     throw new Error('incorrect type of names')
 
-    static createDB(name){
+        this.#createBD(dbName);
+        this.#createTable(dbName, tableName);
+    }
 
-        if (!(typeof name === "string" && name.length > 0))
+    static #createBD(name) {
+        if (!(typeof name === "string" && name.length > 0)){
+
             return console.error("Incorrect name for DB");
+        }
 
         const DB_NAME = name;
-        let DB_PATH = `/Users/misbiheyv/WebstormProjects/sqltest/db/${DB_NAME}.db` // Поменять путь на относительный
+        let DB_PATH = `./${DB_NAME}.db`
 
         try {
             db = new sqlite.Database(DB_PATH, (err) => {
@@ -24,15 +32,17 @@ class DB{
         } catch (e) {
             console.error(e);
         }
+
     }
 
-    static createTable(dataBaseName, tableName){
+
+    static #createTable(dataBaseName, tableName){
 
         if (!(typeof tableName === "string" && tableName.length > 0))
             return console.error("Incorrect name for Table");
 
         const DB_NAME = dataBaseName;
-        let DB_PATH = `/Users/misbiheyv/WebstormProjects/sqltest/db/${DB_NAME}.db`
+        let DB_PATH = `./${DB_NAME}.db`
         const TABLE_NAME = tableName;
 
         // let isTableCreated = (db.run(`SELECT name FROM sqlite_master WHERE type='table' AND name='${TABLE_NAME}';`, err =>{
@@ -61,14 +71,15 @@ class DB{
         db.close();
     }
 
+
     static removeTable(dataBaseName, tableName){
 
-        let DB_PATH = `/Users/misbiheyv/WebstormProjects/sqltest/db/${dataBaseName}.db`
+        let DB_PATH = `./${dataBaseName}.db`
 
         db = new sqlite.Database(DB_PATH, (err) => {
             if (err)
                 return console.error(err.message);
-            console.log(`Database ${dataBaseName} has been connected`);
+            console.log(`Database ${dataBaseName} has not been removed`);
         });
 
         db.run(`DROP TABLE IF EXISTS ${tableName};`, (err) => {
@@ -78,9 +89,10 @@ class DB{
         });
     }
 
+
     static addColsInTable(dataBaseName, tableName, colsNames){
         // удалить параметр colsNames, добавить метод getColNames
-        let DB_PATH = `/Users/misbiheyv/WebstormProjects/sqltest/db/${dataBaseName}.db`
+        let DB_PATH = `./${dataBaseName}.db`
 
         try {
             db = new sqlite.Database(DB_PATH, (err) => {
@@ -97,23 +109,25 @@ class DB{
         }
     }
 
-    static addElementInTable(dataBaseName, tableName, colNames, elements){
+    static async addElementsInTable(dataBaseName, tableName, colNames, elements){
         // Избавиться от параметра colNames
 
-        let DB_PATH = `/Users/misbiheyv/WebstormProjects/sqltest/db/${dataBaseName}.db`
+        let DB_PATH = `./${dataBaseName}.db`
         db = new sqlite.Database(DB_PATH)
 
-        db.run(`INSERT INTO ${tableName}(${colNames}) VALUES(` + '?,'.repeat(elements.length-1) + '?)', elements, function(err) {
-            if (err) {
-                return console.log(err.message);
-            }
-            // get the last insert id
-            console.log(`A row has been inserted with rowid: ${this.lastID}`);
-        });
+        return new Promise(res => {
+            db.run(`INSERT INTO ${tableName}(${colNames}) VALUES(` + '?,'.repeat(elements.length-1) + '?)', elements, function(err) {
+                if (err) {
+                    return console.log(err.message);
+                }
+                // get the last insert id
+                res(this.lastID)
+            });
+        })
     }
 
     static removeElementFromTable(dataBaseName, tableName, removedElement){
-        let DB_PATH = `/Users/misbiheyv/WebstormProjects/sqltest/db/${dataBaseName}.db`
+        let DB_PATH = `./${dataBaseName}.db`
         db = new sqlite.Database(DB_PATH)
 
         try {
@@ -128,7 +142,7 @@ class DB{
     }
 
     static clearTable(dataBaseName, tableName){
-        let DB_PATH = `/Users/misbiheyv/WebstormProjects/sqltest/db/${dataBaseName}.db`
+        let DB_PATH = `./${dataBaseName}.db`
         db = new sqlite.Database(DB_PATH)
 
         try {
@@ -139,17 +153,97 @@ class DB{
         console.log(`${tableName} has been cleared`)
     }
 
-    static #checkDBPath(path){
-        fs.access(path, err => {
-           return !err;
-        });
+    static async getRows(dataBaseName, tableName) {
+        let DB_PATH = `./${dataBaseName}.db`
+        db = new sqlite.Database(DB_PATH)
+        const res = []
+        try {
+            const res_1 = await new Promise(resolve => {
+                db.each(`
+                    SELECT * 
+                    FROM ${tableName} 
+                `,
+                    (err, row) => { res.push(row); },
+                    () => { resolve(res); }
+                );
+            });
+            return res_1;
+        } catch (err_1) {
+            return console.log(err_1);
+        }
     }
 
-    static #getColNames(dataBaseName, tableName){
-        //получить названия столбцов
+    static async getRowById(dataBaseName, tableName, id) {
+        let DB_PATH = `./${dataBaseName}.db`
+        db = new sqlite.Database(DB_PATH)
+        const res = []
+        try {
+            const res_1 = await new Promise(resolve => {
+                db.each(`
+                    SELECT *
+                    FROM ${tableName} 
+                    WHERE id = ${id}
+                `,
+                    (err, row) => { res.push(row); },
+                    () => { resolve(res); }
+                );
+            });
+            return res_1;
+        } catch (err_1) {
+            return console.log(err_1);
+        }
     }
 
-    static #init(){}
+    static updateRowById(dataBaseName, tableName, values) {
+        let DB_PATH = `./${dataBaseName}.db`
+        db = new sqlite.Database(DB_PATH)
+        let placeholders = ''
+        for (const key of Object.keys(values)) {
+            if (key !== 'id')
+                placeholders +=( key + " = '"  + values[key] + "', ")
+        }
+        placeholders = placeholders.substring(0,placeholders.length-2)
+
+        const query = `UPDATE ${tableName} set ${placeholders} WHERE id = ${values.id}`
+
+        return db.prepare(query).run()
+    }
+
+    static async deleteRowById(dataBaseName, tableName, id) {
+        let DB_PATH = `./${dataBaseName}.db`
+        db = new sqlite.Database(DB_PATH)
+        let res = {}
+
+        return this.getRowById(dataBaseName, tableName, id)
+            .then( r => {
+                if(r) res = r
+
+                const query = `DELETE FROM ${tableName} WHERE id = ${id}`
+                db.prepare(query).run()
+                return res
+            })
+            .catch(err => {throw err})
+    }
+
+    static async getRowsCount(dataBaseName, tableName) {
+        let DB_PATH = `./${dataBaseName}.db`
+        db = new sqlite.Database(DB_PATH)
+        const res = []
+        try {
+            const res_1 = await new Promise(resolve => {
+                db.each(`
+                    SELECT COUNT(*) as count
+                    FROM ${tableName} 
+                `,
+                    (err, row) => { res.push(row); },
+                    () => { resolve(res); }
+                );
+            });
+            return res_1;
+        } catch (err_1) {
+            return console.log(err_1);
+        }
+    }
 }
 
-export default DB;
+export default DB
